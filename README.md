@@ -1,134 +1,173 @@
-# INClassTask3 – Monitoring & Logging (Flask + OpenTelemetry + SigNoz)
+````markdown
+# INClassTask3 — Monitoring & Logging (Flask + OpenTelemetry + SigNoz)
 
-Author: **Sumanth Reddy K**  
-Repo: **https://github.com/SumanthReddyKConestoga/INClassTask3**
+**Author:** Sumanth Reddy K  
+**Repo:** https://github.com/SumanthReddyKConestoga/INClassTask3
 
-This repo is a compact, production-adjacent lab that instruments a Flask app with **OpenTelemetry** and ships traces to a local **SigNoz** stack. It’s opinionated, minimal, and easy to run—so you can spend time analyzing signals, not wiring them.
+Instrumented Flask microservice that exports traces to **SigNoz** via **OpenTelemetry**. Run everything with Docker Compose, generate traffic, and inspect traces in the SigNoz UI.
 
-## Stack at a glance
+---
 
-- **App**: Python/Flask (`app.py`)
-- **Instrumentation**: OpenTelemetry SDK + OTLP exporter (gRPC → `otel-collector:4317`)
-- **Collector**: OpenTelemetry Collector (SigNoz distro)
-- **Backend/UI**: SigNoz (ClickHouse, Query Service, Frontend)
-- **Containers**: Docker Compose
+## ✅ Prerequisites
 
-## 1) Prerequisites
-
-- Docker Desktop (or Docker Engine) with **docker compose v2**
+- Docker Desktop / Docker Engine with **docker compose v2**
 - Git
-- (Optional for local non-Docker run) Python 3.10+ and `pip`
+- (Optional) Python 3.10+ if you want to run the app without Docker
 
 Verify:
 ```bash
 docker --version
 docker compose version
 git --version
-2) Clone the repository
-bash
-Copy
-Edit
+````
+
+---
+
+## 🚀 Quick Start (All Docker)
+
+### 1) Clone
+
+```bash
 git clone https://github.com/SumanthReddyKConestoga/INClassTask3.git
 cd INClassTask3
-3) Bring up SigNoz
-SigNoz lives under signoz/deploy/docker.
+```
 
-Windows (PowerShell)
-powershell
-Copy
-Edit
-cd .\signoz\deploy\docker
-docker compose up -d --remove-orphans
-Linux/macOS
-bash
-Copy
-Edit
+### 2) Start SigNoz stack
+
+```bash
 cd signoz/deploy/docker
 docker compose up -d --remove-orphans
-UI: http://localhost:3301
+```
 
-4) Start the instrumented Flask app
-From the repo root:
+* UI: `http://localhost:3301`
+* Give it 60–120 seconds to warm up.
 
-Windows (PowerShell)
-powershell
-Copy
-Edit
-cd C:\Users\ksuma\Downloads\INClassTask3   # adjust path
+### 3) Start the Flask app (from repo root)
+
+```bash
+cd ../../..
 docker compose up -d --build
-Linux/macOS
-bash
-Copy
-Edit
-cd ~/path/to/INClassTask3
-docker compose up -d --build
-Smoke test:
+```
 
-bash
-Copy
-Edit
-curl http://localhost:5000/rolldice
-Generate load:
+* App: `http://localhost:5000`
+* Sample endpoint (emits spans): `/rolldice`
 
-powershell
-Copy
-Edit
+### 4) Generate traffic
+
+**Linux/macOS**
+
+```bash
+for i in {1..25}; do curl -s http://localhost:5000/rolldice > /dev/null; done
+```
+
+**Windows PowerShell**
+
+```powershell
 1..25 | % { curl http://localhost:5000/rolldice > $null }
-5) Run locally without Docker (optional)
-bash
-Copy
-Edit
+```
+
+### 5) Observe traces
+
+Open **SigNoz → Traces** and filter by your service (as set in `app.py`).
+
+---
+
+## 🧰 Useful Commands
+
+**Show containers**
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+```
+
+**Tail app logs**
+
+```bash
+docker compose logs -f
+```
+
+**Stop app**
+
+```bash
+docker compose down
+```
+
+**Stop SigNoz**
+
+```bash
+cd signoz/deploy/docker
+docker compose down
+```
+
+**Full reset (remove SigNoz data)**
+
+```bash
+cd signoz/deploy/docker
+docker compose down -v
+```
+
+---
+
+## 🏗️ Project Structure
+
+```
+INClassTask3/
+├─ .devcontainer/
+├─ signoz/
+│  └─ deploy/docker/           # SigNoz docker-compose + configs
+├─ app.py                      # Flask app with OTEL instrumentation
+├─ docker-compose.yml          # App compose (port 5000)
+├─ otel-collector-config.yaml  # OTEL collector config
+├─ requirements.txt
+├─ up.yml                      # optional helper
+└─ README.md
+```
+
+---
+
+## ⚙️ Configuration Notes
+
+* App uses OTLP gRPC → `otel-collector:4317` (container-to-container).
+* To tweak sampling, service name, or endpoint, set env vars in `docker-compose.yml`:
+
+```yaml
+environment:
+  - OTEL_SERVICE_NAME=info8985-monolith
+  - OTEL_TRACES_SAMPLER=parentbased_always_on
+  - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+```
+
+---
+
+## 🩺 Troubleshooting
+
+* **SigNoz UI empty:** Wait up to 2 minutes after startup; then refresh.
+* **No traces:** Hit `/rolldice` a few times; confirm exporter endpoint matches where the collector runs.
+* **Port conflicts:** Ensure `5000` (app), `3301` (SigNoz UI), and `4317` (OTLP gRPC) are free.
+* **Compose warning “version is obsolete”:** Harmless on compose v2.
+
+---
+
+## 🧪 Run Locally Without Docker (Optional)
+
+```bash
 python -m venv .venv
 # Windows: .\.venv\Scripts\Activate.ps1
-# Linux/mac: source .venv/bin/activate
+# Linux/macOS: source .venv/bin/activate
+
 pip install -r requirements.txt
-python app.py
-6) Useful commands
-bash
-Copy
-Edit
-docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-docker compose logs -f
-docker compose down
-cd signoz/deploy/docker && docker compose down
-cd signoz/deploy/docker && docker compose down -v   # remove data
-7) Config
-docker-compose.yml (app)
+python app.py  # http://localhost:5000
+```
 
-otel-collector-config.yaml (collector)
+> Ensure the exporter endpoint in code/env points to `http://localhost:4317` if the collector is running on your host.
 
-app.py (resource attrs/exporter)
+---
 
-8) Structure
-arduino
-Copy
-Edit
-INClassTask3/
-├─ signoz/deploy/docker/
-├─ app.py
-├─ docker-compose.yml
-├─ otel-collector-config.yaml
-├─ requirements.txt
-└─ README.md
-9) Troubleshooting
-Wait 60–120s after starting SigNoz.
+## 📜 License
 
-Ensure ports 5000/3301/4317 are free.
+MIT — see `LICENSE`.
 
-Check exporter endpoint matches where the collector runs.
+---
 
-10) License
-MIT — see LICENSE.
-
-Built by Sumanth Reddy K.
-'@; Set-Content -Path README.md -Value $c -Encoding UTF8"
-
-sql
-Copy
-Edit
-
-Then commit and push:
-```powershell
-git add README.md
-git commit -m "Add comprehensive README with setup and runbook"
-git push
+```
+```
